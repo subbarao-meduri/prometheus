@@ -5,19 +5,7 @@ FROM registry.ci.openshift.org/open-cluster-management/builder:go1.16-linux AS b
 WORKDIR /workspace
 COPY . .
 
-# install yarn to build binary
-RUN nodejs_version=v14.16.1
-RUN nodejs_platform=linux-x64
-RUN nodejs="node-${nodejs_version}-${nodejs_platform}"
-RUN cd /tmp
-RUN curl -LO "https://nodejs.org/download/release/${nodejs_version}/${nodejs}.tar.gz"
-RUN tar xf "${nodejs}.tar.gz"
-RUN export NODEJS_HOME="/tmp/${nodejs}"
-RUN export PATH=$PATH:$NODEJS_HOME/bin
-RUN HOME=/tmp npm install yarn
-RUN export PATH=$PATH:/tmp/node_modules/.bin
-RUN cd -
-RUN make build
+RUN if yum install -y prometheus-promu; then export BUILD_PROMU=false; fi && make common-build
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 
