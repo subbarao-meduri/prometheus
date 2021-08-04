@@ -1,8 +1,8 @@
 approvers:
   - songleo
-reviewers:
   - clyang82
-  - marcolan018
-  - bjoydeep
   - morvencao
+  - marcolan018
+reviewers:
+  - bjoydeep
   - haoqing0110
