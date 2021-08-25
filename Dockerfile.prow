@@ -5,7 +5,7 @@ FROM registry.ci.openshift.org/open-cluster-management/builder:go1.16-linux AS b
 WORKDIR /workspace
 COPY . .
 
-RUN if yum install -y prometheus-promu; then export BUILD_PROMU=false; fi && make common-build
+RUN go get github.com/prometheus/promu && promu build --prefix ./
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 
