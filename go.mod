@@ -58,11 +58,11 @@ require (
 	github.com/uber/jaeger-lib v2.4.0+incompatible
 	go.uber.org/atomic v1.7.0
 	go.uber.org/goleak v1.1.10
-	golang.org/x/net v0.0.0-20210324051636-2c4c8ecb7826
+	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2
 	golang.org/x/oauth2 v0.0.0-20210323180902-22b0adad7558
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20210426230700-d19ff857e887
-	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
+	golang.org/x/sys v0.0.0-20220111092808-5a964db01320
+	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11
 	golang.org/x/tools v0.1.0
 	google.golang.org/api v0.42.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
@@ -134,11 +134,11 @@ require (
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	go.mongodb.org/mongo-driver v1.4.6 // indirect
 	go.opencensus.io v0.23.0 // indirect
-	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2 // indirect
+	golang.org/x/crypto v0.0.0-20220112180741-5e0467b6c7ce // indirect
 	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
 	golang.org/x/mod v0.4.1 // indirect
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1 // indirect
-	golang.org/x/text v0.3.5 // indirect
+	golang.org/x/text v0.3.6 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20210312152112-fc591d9ea70f // indirect
@@ -152,6 +152,8 @@ require (
 )
 
 replace (
+	// fix CVE-2022-24450
+	github.com/nats-io/nats-server/v2 => github.com/nats-io/nats-server/v2 v2.7.2
 	k8s.io/klog => github.com/simonpasquier/klog-gokit v0.3.0
 	k8s.io/klog/v2 => github.com/simonpasquier/klog-gokit/v2 v2.0.1
 )
