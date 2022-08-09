@@ -60,14 +60,14 @@ All our issues are regularly tagged so that you can also filter down the issues 
 
 The Prometheus project uses [Go modules](https://golang.org/cmd/go/#hdr-Modules__module_versions__and_more) to manage dependencies on external packages.
 
-To add or update a new dependency, use the `go get` command:
+To add or update a new dependency, use the `go install` command:
 
 ```bash
 # Pick the latest tagged release.
-go get example.com/some/module/pkg
+go install example.com/some/module/pkg
 
 # Pick a specific version.
-go get example.com/some/module/pkg@vX.Y.Z
+go install example.com/some/module/pkg@vX.Y.Z
 ```
 
 Tidy up the `go.mod` and `go.sum` files:
