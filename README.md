@@ -126,4 +126,4 @@ Apache License 2.0, see [LICENSE](https://github.com/prometheus/prometheus/blob/
 [circleci]: https://circleci.com/gh/prometheus/prometheus
 [quay]: https://quay.io/repository/prometheus/prometheus
 
-Rebuild Image: Tue Aug 16 14:18:41 EDT 2022
+Rebuild Image: Thu Aug 18 14:44:13 EDT 2022
