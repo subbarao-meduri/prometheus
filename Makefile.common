@@ -221,10 +221,11 @@ endif
 endif
 endif
 
+# NOTICE: must --cgo flag to build dynamically linked binary for FIPS compliance
 .PHONY: common-build
 common-build: promu
 	@echo ">> building binaries"
-	GO111MODULE=$(GO111MODULE) $(PROMU) build --prefix $(PREFIX) $(PROMU_BINARIES)
+	GO111MODULE=$(GO111MODULE) $(PROMU) build --cgo --prefix $(PREFIX) $(PROMU_BINARIES)
 
 .PHONY: common-tarball
 common-tarball: promu
