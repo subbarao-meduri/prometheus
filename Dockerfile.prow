@@ -5,7 +5,7 @@ FROM registry.ci.openshift.org/stolostron/builder:go1.18-linux AS builder
 WORKDIR /workspace
 COPY . .
 
-RUN go install github.com/prometheus/promu@v0.12.0 && promu build --cgo --prefix ./
+RUN go install github.com/prometheus/promu@v0.15.0 && promu build -v --cgo --prefix ./
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 

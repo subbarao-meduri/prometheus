@@ -78,7 +78,7 @@ ifneq ($(shell which gotestsum),)
 endif
 endif
 
-PROMU_VERSION ?= 0.11.1
+PROMU_VERSION ?= 0.15.0
 PROMU_URL     := https://github.com/prometheus/promu/releases/download/v$(PROMU_VERSION)/promu-$(PROMU_VERSION).$(GO_BUILD_PLATFORM).tar.gz
 
 GOLANGCI_LINT :=
@@ -225,7 +225,7 @@ endif
 .PHONY: common-build
 common-build: promu
 	@echo ">> building binaries"
-	GO111MODULE=$(GO111MODULE) $(PROMU) build --cgo --prefix $(PREFIX) $(PROMU_BINARIES)
+	GO111MODULE=$(GO111MODULE) $(PROMU) build -v --cgo --prefix $(PREFIX) $(PROMU_BINARIES)
 
 .PHONY: common-tarball
 common-tarball: promu
