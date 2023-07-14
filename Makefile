@@ -85,7 +85,7 @@ build: assets common-build
 .PHONY: bench_tsdb
 bench_tsdb: $(PROMU)
 	@echo ">> building promtool"
-	@GO111MODULE=$(GO111MODULE) $(PROMU) build --cgo --prefix $(PREFIX) promtool
+	@GO111MODULE=$(GO111MODULE) $(PROMU) build -v --cgo --prefix $(PREFIX) promtool
 	@echo ">> running benchmark, writing result to $(TSDB_BENCHMARK_OUTPUT_DIR)"
 	@$(PROMTOOL) tsdb bench write --metrics=$(TSDB_BENCHMARK_NUM_METRICS) --out=$(TSDB_BENCHMARK_OUTPUT_DIR) $(TSDB_BENCHMARK_DATASET)
 	@$(GO) tool pprof -svg $(PROMTOOL) $(TSDB_BENCHMARK_OUTPUT_DIR)/cpu.prof > $(TSDB_BENCHMARK_OUTPUT_DIR)/cpuprof.svg
