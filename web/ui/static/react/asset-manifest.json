@@ -1,26 +1,14 @@
 {
   "files": {
-    "main.css": "./static/css/main.6d3c05e2.chunk.css",
-    "main.js": "./static/js/main.3140fae0.chunk.js",
-    "main.js.map": "./static/js/main.3140fae0.chunk.js.map",
-    "runtime-main.js": "./static/js/runtime-main.7e00e584.js",
-    "runtime-main.js.map": "./static/js/runtime-main.7e00e584.js.map",
-    "static/css/2.89610b22.chunk.css": "./static/css/2.89610b22.chunk.css",
-    "static/js/2.f560632a.chunk.js": "./static/js/2.f560632a.chunk.js",
-    "static/js/2.f560632a.chunk.js.map": "./static/js/2.f560632a.chunk.js.map",
+    "main.css": "./static/css/main.e075b686.css",
+    "main.js": "./static/js/main.87eaac7d.js",
+    "static/media/codicon.ttf": "./static/media/codicon.b3726f0165bf67ac6849.ttf",
+    "static/media/prometheus_logo_grey.svg": "./static/media/prometheus_logo_grey.3cf697e5443028ca5e5255b93c7906c5.svg",
     "index.html": "./index.html",
-    "precache-manifest.b2514c4441ea0313fe2e2929c635e302.js": "./precache-manifest.b2514c4441ea0313fe2e2929c635e302.js",
-    "service-worker.js": "./service-worker.js",
-    "static/css/2.89610b22.chunk.css.map": "./static/css/2.89610b22.chunk.css.map",
-    "static/css/main.6d3c05e2.chunk.css.map": "./static/css/main.6d3c05e2.chunk.css.map",
-    "static/js/2.f560632a.chunk.js.LICENSE.txt": "./static/js/2.f560632a.chunk.js.LICENSE.txt",
-    "static/media/codicon.ttf": "./static/media/codicon.22349029.ttf"
+    "static/media/index.cjs": "./static/media/index.cd351d7c31d0d3fccf96.cjs"
   },
   "entrypoints": [
-    "static/js/runtime-main.7e00e584.js",
-    "static/css/2.89610b22.chunk.css",
-    "static/js/2.f560632a.chunk.js",
-    "static/css/main.6d3c05e2.chunk.css",
-    "static/js/main.3140fae0.chunk.js"
+    "static/css/main.e075b686.css",
+    "static/js/main.87eaac7d.js"
   ]
 }
