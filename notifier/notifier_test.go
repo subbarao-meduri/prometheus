@@ -18,29 +18,29 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/prometheus/alertmanager/api/v2/models"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/relabel"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/relabel"
 )
 
 func TestPostPath(t *testing.T) {
-	var cases = []struct {
+	cases := []struct {
 		in, out string
 	}{
 		{
@@ -83,19 +83,54 @@ func TestHandlerNextBatch(t *testing.T) {
 	require.NoError(t, alertsEqual(expected[0:maxBatchSize], h.nextBatch()))
 	require.NoError(t, alertsEqual(expected[maxBatchSize:2*maxBatchSize], h.nextBatch()))
 	require.NoError(t, alertsEqual(expected[2*maxBatchSize:], h.nextBatch()))
-	require.Equal(t, 0, len(h.queue), "Expected queue to be empty but got %d alerts", len(h.queue))
+	require.Empty(t, h.queue, "Expected queue to be empty but got %d alerts", len(h.queue))
 }
 
 func alertsEqual(a, b []*Alert) error {
 	if len(a) != len(b) {
-		return errors.Errorf("length mismatch: %v != %v", a, b)
+		return fmt.Errorf("length mismatch: %v != %v", a, b)
 	}
 	for i, alert := range a {
 		if !labels.Equal(alert.Labels, b[i].Labels) {
-			return errors.Errorf("label mismatch at index %d: %s != %s", i, alert.Labels, b[i].Labels)
+			return fmt.Errorf("label mismatch at index %d: %s != %s", i, alert.Labels, b[i].Labels)
 		}
 	}
 	return nil
+}
+
+func newTestHTTPServerBuilder(expected *[]*Alert, errc chan<- error, u, p string, status *atomic.Int32) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var err error
+		defer func() {
+			if err == nil {
+				return
+			}
+			select {
+			case errc <- err:
+			default:
+			}
+		}()
+		user, pass, _ := r.BasicAuth()
+		if user != u || pass != p {
+			err = fmt.Errorf("unexpected user/password: %s/%s != %s/%s", user, pass, u, p)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			err = fmt.Errorf("error reading body: %w", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		var alerts []*Alert
+		err = json.Unmarshal(b, &alerts)
+		if err == nil {
+			err = alertsEqual(*expected, alerts)
+		}
+		w.WriteHeader(int(status.Load()))
+	}))
 }
 
 func TestHandlerSendAll(t *testing.T) {
@@ -107,34 +142,8 @@ func TestHandlerSendAll(t *testing.T) {
 	status1.Store(int32(http.StatusOK))
 	status2.Store(int32(http.StatusOK))
 
-	newHTTPServer := func(u, p string, status *atomic.Int32) *httptest.Server {
-		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var err error
-			defer func() {
-				if err == nil {
-					return
-				}
-				select {
-				case errc <- err:
-				default:
-				}
-			}()
-			user, pass, _ := r.BasicAuth()
-			if user != u || pass != p {
-				err = errors.Errorf("unexpected user/password: %s/%s != %s/%s", user, pass, u, p)
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			var alerts []*Alert
-			err = json.NewDecoder(r.Body).Decode(&alerts)
-			if err == nil {
-				err = alertsEqual(expected, alerts)
-			}
-			w.WriteHeader(int(status.Load()))
-		}))
-	}
-	server1 := newHTTPServer("prometheus", "testing_password", &status1)
-	server2 := newHTTPServer("", "", &status2)
+	server1 := newTestHTTPServerBuilder(&expected, errc, "prometheus", "testing_password", &status1)
+	server2 := newTestHTTPServerBuilder(&expected, errc, "", "", &status2)
 	defer server1.Close()
 	defer server2.Close()
 
@@ -146,7 +155,7 @@ func TestHandlerSendAll(t *testing.T) {
 				Username: "prometheus",
 				Password: "testing_password",
 			},
-		}, "auth_alertmanager", false, false)
+		}, "auth_alertmanager")
 
 	h.alertmanagers = make(map[string]*alertmanagerSet)
 
@@ -205,6 +214,129 @@ func TestHandlerSendAll(t *testing.T) {
 	checkNoErr()
 }
 
+func TestHandlerSendAllRemapPerAm(t *testing.T) {
+	var (
+		errc      = make(chan error, 1)
+		expected1 = make([]*Alert, 0, maxBatchSize)
+		expected2 = make([]*Alert, 0, maxBatchSize)
+		expected3 = make([]*Alert, 0)
+
+		statusOK atomic.Int32
+	)
+	statusOK.Store(int32(http.StatusOK))
+
+	server1 := newTestHTTPServerBuilder(&expected1, errc, "", "", &statusOK)
+	server2 := newTestHTTPServerBuilder(&expected2, errc, "", "", &statusOK)
+	server3 := newTestHTTPServerBuilder(&expected3, errc, "", "", &statusOK)
+
+	defer server1.Close()
+	defer server2.Close()
+	defer server3.Close()
+
+	h := NewManager(&Options{}, nil)
+	h.alertmanagers = make(map[string]*alertmanagerSet)
+
+	am1Cfg := config.DefaultAlertmanagerConfig
+	am1Cfg.Timeout = model.Duration(time.Second)
+
+	am2Cfg := config.DefaultAlertmanagerConfig
+	am2Cfg.Timeout = model.Duration(time.Second)
+	am2Cfg.AlertRelabelConfigs = []*relabel.Config{
+		{
+			SourceLabels: model.LabelNames{"alertnamedrop"},
+			Action:       "drop",
+			Regex:        relabel.MustNewRegexp(".+"),
+		},
+	}
+
+	am3Cfg := config.DefaultAlertmanagerConfig
+	am3Cfg.Timeout = model.Duration(time.Second)
+	am3Cfg.AlertRelabelConfigs = []*relabel.Config{
+		{
+			SourceLabels: model.LabelNames{"alertname"},
+			Action:       "drop",
+			Regex:        relabel.MustNewRegexp(".+"),
+		},
+	}
+
+	h.alertmanagers = map[string]*alertmanagerSet{
+		// Drop no alerts.
+		"1": {
+			ams: []alertmanager{
+				alertmanagerMock{
+					urlf: func() string { return server1.URL },
+				},
+			},
+			cfg: &am1Cfg,
+		},
+		// Drop only alerts with the "alertnamedrop" label.
+		"2": {
+			ams: []alertmanager{
+				alertmanagerMock{
+					urlf: func() string { return server2.URL },
+				},
+			},
+			cfg: &am2Cfg,
+		},
+		// Drop all alerts.
+		"3": {
+			ams: []alertmanager{
+				alertmanagerMock{
+					urlf: func() string { return server3.URL },
+				},
+			},
+			cfg: &am3Cfg,
+		},
+		// Empty list of Alertmanager endpoints.
+		"4": {
+			ams: []alertmanager{},
+			cfg: &config.DefaultAlertmanagerConfig,
+		},
+	}
+
+	for i := range make([]struct{}, maxBatchSize/2) {
+		h.queue = append(h.queue,
+			&Alert{
+				Labels: labels.FromStrings("alertname", fmt.Sprintf("%d", i)),
+			},
+			&Alert{
+				Labels: labels.FromStrings("alertname", "test", "alertnamedrop", fmt.Sprintf("%d", i)),
+			},
+		)
+
+		expected1 = append(expected1,
+			&Alert{
+				Labels: labels.FromStrings("alertname", fmt.Sprintf("%d", i)),
+			}, &Alert{
+				Labels: labels.FromStrings("alertname", "test", "alertnamedrop", fmt.Sprintf("%d", i)),
+			},
+		)
+
+		expected2 = append(expected2, &Alert{
+			Labels: labels.FromStrings("alertname", fmt.Sprintf("%d", i)),
+		})
+	}
+
+	checkNoErr := func() {
+		t.Helper()
+		select {
+		case err := <-errc:
+			require.NoError(t, err)
+		default:
+		}
+	}
+
+	require.True(t, h.sendAll(h.queue...), "all sends failed unexpectedly")
+	checkNoErr()
+
+	// Verify that individual locks are released.
+	for k := range h.alertmanagers {
+		h.alertmanagers[k].mtx.Lock()
+		h.alertmanagers[k].ams = nil
+		h.alertmanagers[k].mtx.Unlock()
+	}
+}
+
 func TestCustomDo(t *testing.T) {
 	const testURL = "http://testurl.com/"
 	const testBody = "testbody"
@@ -213,7 +345,7 @@ func TestCustomDo(t *testing.T) {
 	h := NewManager(&Options{
 		Do: func(_ context.Context, client *http.Client, req *http.Request) (*http.Response, error) {
 			received = true
-			body, err := ioutil.ReadAll(req.Body)
+			body, err := io.ReadAll(req.Body)
 
 			require.NoError(t, err)
 
@@ -222,7 +354,7 @@ func TestCustomDo(t *testing.T) {
 			require.Equal(t, testURL, req.URL.String())
 
 			return &http.Response{
-				Body: ioutil.NopCloser(bytes.NewBuffer(nil)),
+				Body: io.NopCloser(bytes.NewBuffer(nil)),
 			}, nil
 		},
 	}, nil)
@@ -235,7 +367,7 @@ func TestCustomDo(t *testing.T) {
 func TestExternalLabels(t *testing.T) {
 	h := NewManager(&Options{
 		QueueCapacity:  3 * maxBatchSize,
-		ExternalLabels: labels.Labels{{Name: "a", Value: "b"}},
+		ExternalLabels: labels.FromStrings("a", "b"),
 		RelabelConfigs: []*relabel.Config{
 			{
 				SourceLabels: model.LabelNames{"alertname"},
@@ -322,7 +454,13 @@ func TestHandlerQueuing(t *testing.T) {
 		select {
 		case expected := <-expectedc:
 			var alerts []*Alert
-			err := json.NewDecoder(r.Body).Decode(&alerts)
+
+			b, err := io.ReadAll(r.Body)
+			if err != nil {
+				panic(err)
+			}
+
+			err = json.Unmarshal(b, &alerts)
 			if err == nil {
 				err = alertsEqual(expected, alerts)
 			}
@@ -378,7 +516,7 @@ func TestHandlerQueuing(t *testing.T) {
 				require.NoError(t, err)
 				return
 			case <-time.After(5 * time.Second):
-				t.Fatalf("Alerts were not pushed")
+				require.FailNow(t, "Alerts were not pushed.")
 			}
 		}
 	}
@@ -410,7 +548,7 @@ func TestHandlerQueuing(t *testing.T) {
 	case err := <-errc:
 		require.NoError(t, err)
 	case <-time.After(5 * time.Second):
-		t.Fatalf("Alerts were not pushed")
+		require.FailNow(t, "Alerts were not pushed.")
 	}
 
 	// Verify that we receive the last 3 batches.
@@ -433,7 +571,7 @@ func (a alertmanagerMock) url() *url.URL {
 
 func TestLabelSetNotReused(t *testing.T) {
 	tg := makeInputTargetGroup()
-	_, _, err := alertmanagerFromGroup(tg, &config.AlertmanagerConfig{})
+	_, _, err := AlertmanagerFromGroup(tg, &config.AlertmanagerConfig{})
 
 	require.NoError(t, err)
 
@@ -442,7 +580,7 @@ func TestLabelSetNotReused(t *testing.T) {
 }
 
 func TestReload(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		in  *targetgroup.Group
 		out string
 	}{
@@ -466,14 +604,12 @@ alerting:
   alertmanagers:
   - static_configs:
 `
-	if err := yaml.UnmarshalStrict([]byte(s), cfg); err != nil {
-		t.Fatalf("Unable to load YAML config: %s", err)
-	}
-	require.Equal(t, 1, len(cfg.AlertingConfig.AlertmanagerConfigs))
+	err := yaml.UnmarshalStrict([]byte(s), cfg)
+	require.NoError(t, err, "Unable to load YAML config.")
+	require.Len(t, cfg.AlertingConfig.AlertmanagerConfigs, 1)
 
-	if err := n.ApplyConfig(cfg); err != nil {
-		t.Fatalf("Error Applying the config:%v", err)
-	}
+	err = n.ApplyConfig(cfg)
+	require.NoError(t, err, "Error applying the config.")
 
 	tgs := make(map[string][]*targetgroup.Group)
 	for _, tt := range tests {
@@ -488,11 +624,10 @@ alerting:
 
 		require.Equal(t, tt.out, res)
 	}
-
 }
 
 func TestDroppedAlertmanagers(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		in  *targetgroup.Group
 		out string
 	}{
@@ -520,14 +655,12 @@ alerting:
         regex: 'alertmanager:9093'
         action: drop
 `
-	if err := yaml.UnmarshalStrict([]byte(s), cfg); err != nil {
-		t.Fatalf("Unable to load YAML config: %s", err)
-	}
-	require.Equal(t, 1, len(cfg.AlertingConfig.AlertmanagerConfigs))
+	err := yaml.UnmarshalStrict([]byte(s), cfg)
+	require.NoError(t, err, "Unable to load YAML config.")
+	require.Len(t, cfg.AlertingConfig.AlertmanagerConfigs, 1)
 
-	if err := n.ApplyConfig(cfg); err != nil {
-		t.Fatalf("Error Applying the config:%v", err)
-	}
+	err = n.ApplyConfig(cfg)
+	require.NoError(t, err, "Error applying the config.")
 
 	tgs := make(map[string][]*targetgroup.Group)
 	for _, tt := range tests {
@@ -561,5 +694,120 @@ func makeInputTargetGroup() *targetgroup.Group {
 }
 
 func TestLabelsToOpenAPILabelSet(t *testing.T) {
-	require.Equal(t, models.LabelSet{"aaa": "111", "bbb": "222"}, labelsToOpenAPILabelSet(labels.Labels{{Name: "aaa", Value: "111"}, {Name: "bbb", Value: "222"}}))
+	require.Equal(t, models.LabelSet{"aaa": "111", "bbb": "222"}, labelsToOpenAPILabelSet(labels.FromStrings("aaa", "111", "bbb", "222")))
+}
+
+// TestHangingNotifier validates that targets updates happen even when there are
+// queued alerts.
+func TestHangingNotifier(t *testing.T) {
+	// Note: When targets are not updated in time, this test is flaky because go
+	// selects are not deterministic. Therefore we run 10 subtests to run into the issue.
+	for i := 0; i < 10; i++ {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			var (
+				done    = make(chan struct{})
+				changed = make(chan struct{})
+				syncCh  = make(chan map[string][]*targetgroup.Group)
+			)
+
+			defer func() {
+				close(done)
+			}()
+
+			var calledOnce bool
+			// Setting up a bad server. This server hangs for 2 seconds.
+			badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if calledOnce {
+					t.Fatal("hanging server called multiple times")
+				}
+				calledOnce = true
+				select {
+				case <-done:
+				case <-time.After(2 * time.Second):
+				}
+			}))
+			badURL, err := url.Parse(badServer.URL)
+			require.NoError(t, err)
+			badAddress := badURL.Host // Used for __name__ label in targets.
+
+			// Setting up a bad server. This server returns fast, signaling requests on
+			// by closing the changed channel.
+			goodServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				close(changed)
+			}))
+			goodURL, err := url.Parse(goodServer.URL)
+			require.NoError(t, err)
+			goodAddress := goodURL.Host // Used for __name__ label in targets.
+
+			h := NewManager(
+				&Options{
+					QueueCapacity: 20 * maxBatchSize,
+				},
+				nil,
+			)
+
+			h.alertmanagers = make(map[string]*alertmanagerSet)
+
+			am1Cfg := config.DefaultAlertmanagerConfig
+			am1Cfg.Timeout = model.Duration(200 * time.Millisecond)
+
+			h.alertmanagers["config-0"] = &alertmanagerSet{
+				ams:     []alertmanager{},
+				cfg:     &am1Cfg,
+				metrics: h.metrics,
+			}
+			go h.Run(syncCh)
+			defer h.Stop()
+
+			var alerts []*Alert
+			for i := range make([]struct{}, 20*maxBatchSize) {
+				alerts = append(alerts, &Alert{
+					Labels: labels.FromStrings("alertname", fmt.Sprintf("%d", i)),
+				})
+			}
+
+			// Injecting the hanging server URL.
+			syncCh <- map[string][]*targetgroup.Group{
+				"config-0": {
+					{
+						Targets: []model.LabelSet{
+							{
+								model.AddressLabel: model.LabelValue(badAddress),
+							},
+						},
+					},
+				},
+			}
+
+			// Queing alerts.
+			h.Send(alerts...)
+
+			// Updating with a working alertmanager target.
+			go func() {
+				select {
+				case syncCh <- map[string][]*targetgroup.Group{
+					"config-0": {
+						{
+							Targets: []model.LabelSet{
+								{
+									model.AddressLabel: model.LabelValue(goodAddress),
+								},
+							},
+						},
+					},
+				}:
+				case <-done:
+				}
+			}()
+
+			select {
+			case <-time.After(1 * time.Second):
+				t.Fatalf("Timeout after 1 second, targets not synced in time.")
+			case <-changed:
+				// The good server has been hit in less than 3 seconds, therefore
+				// targets have been updated before a second call could be made to the
+				// bad server.
+			}
+		})
+	}
 }
