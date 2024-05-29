@@ -203,8 +203,6 @@ require (
 )
 
 replace (
-	// fix CVE-2022-24450
-	github.com/nats-io/nats-server/v2 => github.com/nats-io/nats-server/v2 v2.7.2
 	k8s.io/klog => github.com/simonpasquier/klog-gokit v0.3.0
 	k8s.io/klog/v2 => github.com/simonpasquier/klog-gokit/v3 v3.3.0
 )
@@ -217,5 +215,3 @@ exclude (
 	github.com/grpc-ecosystem/grpc-gateway v1.14.7
 	google.golang.org/api v0.30.0
 )
-
-replace golang.org/x/net => golang.org/x/net v0.17.0

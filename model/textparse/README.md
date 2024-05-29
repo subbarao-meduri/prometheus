@@ -3,4 +3,4 @@ In the rare case that you need to update the textparse lexers, edit promlex.l or
 `golex -o=promlex.l.go promlex.l`
 
 Note that you need golex installed: 
-`go install -u modernc.org/golex`
+`go get -u modernc.org/golex`

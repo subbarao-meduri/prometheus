@@ -189,5 +189,3 @@ Apache License 2.0, see [LICENSE](https://github.com/prometheus/prometheus/blob/
 
 [hub]: https://hub.docker.com/r/prom/prometheus/
 [quay]: https://quay.io/repository/prometheus/prometheus
-
-Rebuild Image: Thu Aug 18 14:44:13 EDT 2022
