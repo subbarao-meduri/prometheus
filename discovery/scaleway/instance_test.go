@@ -16,9 +16,9 @@ package scaleway
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/prometheus/common/model"
@@ -27,9 +27,10 @@ import (
 )
 
 var (
-	testProjectID = "8feda53f-15f0-447f-badf-ebe32dad2fc0"
-	testSecretKey = "6d6579e5-a5b9-49fc-a35f-b4feb9b87301"
-	testAccessKey = "SCW0W8NG6024YHRJ7723"
+	testProjectID     = "8feda53f-15f0-447f-badf-ebe32dad2fc0"
+	testSecretKeyFile = "testdata/secret_key"
+	testSecretKey     = "6d6579e5-a5b9-49fc-a35f-b4feb9b87301"
+	testAccessKey     = "SCW0W8NG6024YHRJ7723"
 )
 
 func TestScalewayInstanceRefresh(t *testing.T) {
@@ -54,12 +55,12 @@ api_url: %s
 	tgs, err := d.refresh(ctx)
 	require.NoError(t, err)
 
-	require.Equal(t, 1, len(tgs))
+	require.Len(t, tgs, 1)
 
 	tg := tgs[0]
 	require.NotNil(t, tg)
 	require.NotNil(t, tg.Targets)
-	require.Equal(t, 2, len(tg.Targets))
+	require.Len(t, tg.Targets, 2)
 
 	for i, lbls := range []model.LabelSet{
 		{
@@ -121,12 +122,12 @@ func mockScalewayInstance(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad token id", http.StatusUnauthorized)
 		return
 	}
-	if r.RequestURI != "/instance/v1/zones/fr-par-1/servers?page=1" {
+	if r.URL.Path != "/instance/v1/zones/fr-par-1/servers" {
 		http.Error(w, "bad url", http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	instance, err := ioutil.ReadFile("testdata/instance.json")
+	instance, err := os.ReadFile("testdata/instance.json")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -136,4 +137,29 @@ func mockScalewayInstance(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+func TestScalewayInstanceAuthToken(t *testing.T) {
+	mock := httptest.NewServer(http.HandlerFunc(mockScalewayInstance))
+	defer mock.Close()
+
+	cfgString := fmt.Sprintf(`
+---
+role: instance
+project_id: %s
+secret_key_file: %s
+access_key: %s
+api_url: %s
+`, testProjectID, testSecretKeyFile, testAccessKey, mock.URL)
+	var cfg SDConfig
+	require.NoError(t, yaml.UnmarshalStrict([]byte(cfgString), &cfg))
+
+	d, err := newRefresher(&cfg)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	tgs, err := d.refresh(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, tgs, 1)
 }

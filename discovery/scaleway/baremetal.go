@@ -25,10 +25,11 @@ import (
 	"github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
-	"github.com/prometheus/prometheus/discovery/refresh"
-	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/scaleway/scaleway-sdk-go/api/baremetal/v1"
 	"github.com/scaleway/scaleway-sdk-go/scw"
+
+	"github.com/prometheus/prometheus/discovery/refresh"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
 )
 
 type baremetalDiscovery struct {
@@ -70,15 +71,23 @@ func newBaremetalDiscovery(conf *SDConfig) (*baremetalDiscovery, error) {
 		tagsFilter: conf.TagsFilter,
 	}
 
-	rt, err := config.NewRoundTripperFromConfig(conf.HTTPClientConfig, "scaleway_sd", false, false)
+	rt, err := config.NewRoundTripperFromConfig(conf.HTTPClientConfig, "scaleway_sd")
 	if err != nil {
 		return nil, err
+	}
+
+	if conf.SecretKeyFile != "" {
+		rt, err = newAuthTokenFileRoundTripper(conf.SecretKeyFile, rt)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	profile, err := loadProfile(conf)
 	if err != nil {
 		return nil, err
 	}
+
 	d.client, err = scw.NewClient(
 		scw.WithHTTPClient(&http.Client{
 			Transport: rt,
