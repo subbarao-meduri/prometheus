@@ -1,0 +1,7 @@
+# Copyright Contributors to the Open Cluster Management project
+# Licensed under the Apache License 2.0
+
+include Makefile.common.prow
+
+# Selectively overwrite targets from upstream Makefile as needed
+# Referenced from Dockerfile.prow, Containerfile.operator 

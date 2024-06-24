@@ -1,0 +1,11 @@
+# Copyright Contributors to the Open Cluster Management project
+# Licensed under the Apache License 2.0
+
+include Makefile.common
+
+# Selectively overwrite targetsSelectively overwrite targets from upstream Makefile.common as needed
+
+.PHONY: common-build
+common-build: promu
+	@echo ">> building FIPS complaint binaries"
+	$(PROMU) -c ".promu.prow.yml" build -v --cgo --prefix $(PREFIX) $(PROMU_BINARIES)

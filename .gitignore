@@ -17,6 +17,7 @@ benchmark.txt
 
 !/.travis.yml
 !/.promu.yml
+!/.promu.prow.yml
 !/.golangci.yml
 /documentation/examples/remote_storage/remote_storage_adapter/remote_storage_adapter
 /documentation/examples/remote_storage/example_write_adapter/example_write_adapter
