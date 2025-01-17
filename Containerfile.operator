@@ -6,7 +6,7 @@ FROM brew.registry.redhat.io/rh-osbs/openshift-golang-builder:rhel_8_1.20 AS bui
 WORKDIR /workspace
 COPY . .
 
-RUN go install -mod=mod github.com/prometheus/promu@v0.15.0 && go mod vendor && /go/bin/promu build -v --cgo --prefix ./
+RUN go install -mod=mod github.com/prometheus/promu@v0.17.0 && go mod vendor && /go/bin/promu build -v --cgo --prefix ./
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 
